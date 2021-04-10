@@ -182,7 +182,7 @@ async def _8ball(ctx):
     await ctx.send(f"{random.choice(eight_ball_responses)}")
 
 
-@bot.command(aliases=["Roll"], description="Returns the id of the recent 4chan post from the most active boards. Usage: <$roll>")
+@bot.command(aliases=["Roll"], description="Returns the id of the most recent 4chan post from the most active boards. Usage: <$roll>")
 async def roll(ctx):
     await ctx.send(get_last_4chan_id())
 
