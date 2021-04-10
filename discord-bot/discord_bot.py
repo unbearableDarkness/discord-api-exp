@@ -200,7 +200,7 @@ async def psycho(ctx):
     await ctx.send(embed=msg)
 
 
-@bot.command(aliases=["flip"], description="A simple coin flip. Usage: <$flip> <tails | head>")
+@bot.command(aliases=["flip"], description="A simple coin flip. Usage: <$flip> <tails | heads>")
 async def coin(ctx):
     msg = trim_string(ctx.message.content.lower(), ' ', 2)
     r = ["tails", "heads"]
