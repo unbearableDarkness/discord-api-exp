@@ -294,8 +294,8 @@ async def insult(ctx):
         return
     if msg == "someone" or msg == "qualcuno":
         random_member = random.choice(ctx.channel.members)
-        # check if the random selected member is the author of the message or a bot, or myself
-        while random_member == ctx.message.author or random_member.bot is True or random_member.id == my_user_id:
+        # check if the random selected member is the author of the message or a bot
+        while random_member == ctx.message.author or random_member.bot is True:
             random_member = random.choice(ctx.channel.members)
         await ctx.send("<@{0}> {1}".format(random_member.id, random_insult))
         return
