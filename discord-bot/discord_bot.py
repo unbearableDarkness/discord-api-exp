@@ -5,6 +5,8 @@ import aiohttp
 import random
 import json
 import time
+import os
+import csv
 
 from discord.ext import commands
 
@@ -13,9 +15,9 @@ intents = discord.Intents.default()
 intents.members = True
 command_prefix_symbol = '$'
 bot = commands.Bot(command_prefix=command_prefix_symbol, intents=intents)
-my_user_id = ""
-my_bot_id = ""
-
+my_user_id = 0
+my_bot_id = 0
+private_channel_id = 0
 
 active_boards = [0, 1, 6, 29, 48, 52, 61, 70]
 boards = ["a", "b", "c", "d", "e", "f", "g", "gif", "h", "hr", "k", "m", "o", "p", "r", "s", "t", "u", "v", "vg", "vm",
@@ -24,8 +26,7 @@ boards = ["a", "b", "c", "d", "e", "f", "g", "gif", "h", "hr", "k", "m", "o", "p
           "lit", "mlp", "mu", "n", "news", "out", "po", "pol", "pw", "qst", "sci", "soc", "sp", "tg", "toy", "trv",
           "tv", "vp", "vt", "wsg", "wsr", "x", "xs"]
 
-
-_8ball_responses = [
+eight_ball_responses = [
     "It is certain.",
     "It is decidedly so.",
     "Most likely.",
@@ -47,7 +48,6 @@ _8ball_responses = [
     "Very doubtful.",
     "Absolutely not."
 ]
-
 
 greetings = [
     "Hello",
@@ -103,8 +103,8 @@ def get_random_sentence_from_file(filename, mode):
 
     # remove empty elements from our list
     quotes = list(filter(None, quotes))
-    r = random.randint(0, len(quotes) - 1)
-    return str(quotes[r])
+    r = random.choice(quotes)
+    return str(r)
 
 
 def get_last_4chan_id():
@@ -130,7 +130,7 @@ def get_last_4chan_id():
                         replies_info.append((reply["no"], reply["now"]))
 
     # sort the posts by date by considering only numbers
-    [r.sort(key=lambda x: [d for d in x[1] if d.isdigit()]) for r in [threads_info, replies_info]]
+    [r.sort(key=lambda x: [char for char in x[1] if char.isdigit()]) for r in [threads_info, replies_info]]
 
     # Get only the digits from the dates and compare them
     # - then return the id associated to that date
@@ -143,12 +143,10 @@ def get_last_4chan_id():
         return replies_info[-1][0]
 
 
-
 # Events
 @bot.event
 async def on_ready():
-    private_channel = ""
-    channel = bot.get_channel(private_channel)
+    channel = bot.get_channel(private_channel_id)
     await channel.send("I am now online. It is currently {0}".format(datetime.datetime.now().strftime("%H:%M")))
 
     # crunch some information
@@ -167,41 +165,42 @@ async def on_message(message):
     if message.author == bot.user:
         return
     for greeting in greetings:
-        if (message.content.lower()).startswith(greeting.lower()):
+        if message.content.lower() == greeting.lower():
             await message.channel.send("{0}!".format(trim_string(message.content.title(), ' ', 0)))
     await bot.process_commands(message)
 
 
 # Commands
 # This command can be used to check latency
-@bot.command(aliases=["Ping"], pass_context=True)
+@bot.command(aliases=["Ping"], description="A simple command that checks latency. Usage: <$ping>")
 async def ping(ctx):
     await ctx.send(f"Pong! - {round(bot.latency * 1000)}ms")
 
 
-@bot.command(aliases=["8ball"], pass_context=True)
+@bot.command(aliases=["8ball"], description="Asks 8ball a question. Usage: <$8ball> <question>")
 async def _8ball(ctx):
-    await ctx.send(f"{random.choice(_8ball_responses)}")
+    await ctx.send(f"{random.choice(eight_ball_responses)}")
 
 
-@bot.command(aliases=["Roll"], pass_context=True)
+@bot.command(aliases=["Roll"], description="Returns the id of the recent 4chan post from the most active boards. Usage: <$roll>")
 async def roll(ctx):
     await ctx.send(get_last_4chan_id())
 
 
-@bot.command(aliases=["Quote"], pass_context=True)
+@bot.command(aliases=["Quote"], description="Returns a random quote from the zenquotes.io website. Usage: <$quote>")
 async def quote(ctx):
     msg = discord.Embed(description=get_inspirational_quote(), color=discord.Colour.purple())
     await ctx.send(embed=msg)
 
 
-@bot.command(aliases=["Psycho"], pass_context=True)
+@bot.command(aliases=["Psycho"], description="Returns a random quote from the movie American Psycho. Usage: <$psycho>")
 async def psycho(ctx):
-    msg = discord.Embed(description=get_random_sentence_from_file("american_psycho_quotes.txt", "r"), color=discord.Colour.purple())
+    msg = discord.Embed(description=get_random_sentence_from_file("american_psycho.txt", "r"),
+                        color=discord.Colour.purple())
     await ctx.send(embed=msg)
 
 
-@bot.command(aliases=["flip"], pass_context=True)
+@bot.command(aliases=["flip"], description="A simple coin flip. Usage: <$flip> <tails")
 async def coin(ctx):
     msg = trim_string(ctx.message.content.lower(), ' ', 2)
     r = ["tails", "heads"]
@@ -218,7 +217,7 @@ async def coin(ctx):
             return
 
 
-@bot.command(aliases=["quit"], pass_context=True)
+@bot.command(aliases=["quit"])
 async def disconnect(ctx):
     if ctx.message.author.id == my_user_id:
         try:
@@ -228,7 +227,43 @@ async def disconnect(ctx):
         except RuntimeError:
             exit(-1)
     else:
-        await ctx.send("Did you think you could outsmart me?")
+        await ctx.send("This command can only be called be the bot's owner.")
+        return
+
+
+# noinspection PyUnreachableCode
+@bot.command()
+async def history(ctx):
+    return
+    if ctx.message.author.id == my_user_id:
+        await ctx.send("Started fetching messages info...")
+        t1 = time.time()
+        messages_limit = 10000000
+        buffer_limit = 2500
+        i = 0
+        msg_count = 0
+        user_csv_data = "user_csv_data.csv"
+        user_csv_data_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "user_histories", user_csv_data)
+        with open(user_csv_data_path, "a", encoding="utf-8") as fc:
+            writer = csv.writer(fc, delimiter=',')
+            csv_list = []
+            async for message in ctx.channel.history(limit=messages_limit):
+                if message.author.bot is False:
+                    msg_count += 1
+                    csv_list.append([str(message.author.id), message.content])
+                    i += 1
+                    if i >= buffer_limit:
+                        writer.writerows(csv_list)
+                        csv_list = []
+                        i = 0
+                else:
+                    pass
+            t2 = time.time()
+            await ctx.send("Time taken: {0} seconds. Fetched {1} message/s.".format(round(t2 - t1), msg_count))
+            print(t2 - t1)
+            return
+    else:
+        await ctx.send("This command can only be called be the bot's owner.")
         return
 
 
@@ -247,7 +282,7 @@ async def test_time(ctx):
         return
 
 
-@bot.command(aliases=["insulta"], pass_context=True)
+@bot.command(aliases=["insulta"], description="Allows you to insult another user. You can specify a user or type 'someone' to insult a random user. Usage: <$insult> <@id>")
 async def insult(ctx):
     # here we fetch the user id of the user to insult and the insult
     random_insult = get_random_sentence_from_file("insults.txt", "r")
@@ -284,3 +319,4 @@ async def insult(ctx):
 # My discord token
 TOKEN = read_token()
 bot.run(TOKEN)
+
