@@ -267,8 +267,10 @@ async def history(ctx):
         return
 
 
+# noinspection PyUnreachableCode
 @bot.command()
 async def test_time(ctx):
+    return
     if ctx.message.author.id == my_user_id:
         channel = bot.get_channel(private_channel_id)
         t1 = time.time()
