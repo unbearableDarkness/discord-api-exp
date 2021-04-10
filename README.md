@@ -1,1 +1,1 @@
-# discord-api-exp
+# Discord api experimentation
