@@ -232,6 +232,21 @@ async def disconnect(ctx):
         return
 
 
+@bot.command()
+async def test_time(ctx):
+    if ctx.message.author.id == my_user_id:
+        channel = bot.get_channel(private_channel_id)
+        t1 = time.time()
+        async for _ in ctx.channel.history(limit=1000000):
+            pass
+        t2 = time.time()
+        await ctx.send("Time taken: {0}".format(t2-t1))
+        print(t2 - t1)
+        return
+    else:
+        return
+
+
 @bot.command(aliases=["insulta"], pass_context=True)
 async def insult(ctx):
     # here we fetch the user id of the user to insult and the insult
