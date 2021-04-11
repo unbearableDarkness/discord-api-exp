@@ -1,20 +1,22 @@
 import requests
 import datetime
 import discord
-import aiohttp
 import random
 import json
 import time
 import os
 import csv
+import numpy
+import re
+import html
 
 from discord.ext import commands
 
 # Subscribe to the privileged members intent.
 intents = discord.Intents.default()
 intents.members = True
-command_prefix_symbol = '$'
-bot = commands.Bot(command_prefix=command_prefix_symbol, intents=intents)
+prefix_symbol = '$'
+bot = commands.Bot(command_prefix=prefix_symbol, intents=intents)
 my_user_id = 0
 my_bot_id = 0
 private_channel_id = 0
@@ -63,9 +65,44 @@ greetings = [
 ]
 
 
+_4chan_rolls = {
+    "2": "dubs",
+    "3": "trips",
+    "4": "quads",
+    "5": "quints",
+    "6": "sexts",
+    "7": "septs",
+    "8": "octs",
+    "9": "nons",
+    "10": "dects"
+}
+
+
+
 def trim_string(string, delimiter, part):
     # $command 'delimiter' message
     return string.partition(delimiter)[part]
+
+
+def read_token():
+    with open("token.txt", 'r') as f:
+        lines = f.readlines()
+        return lines[0].strip()
+
+
+def repeating_digits(num):
+    digit_list = list(map(int, str(num)))
+    temp = [digit_list[-1]]
+    cc = 0
+    for i in range(len(digit_list) - 2, 0, -1):
+        if digit_list[i] == temp[-1]:
+            cc += 1
+        elif cc == 0:
+            return False
+        elif cc >= 1:
+            return _4chan_rolls["{0}".format(cc + 1)]
+    if cc > 0:
+        return _4chan_rolls["{0}".format(cc + 1)]
 
 
 def trim_string_slice(string, delimiter, part, choice):
@@ -74,12 +111,6 @@ def trim_string_slice(string, delimiter, part, choice):
         return string.partition(delimiter)[part:]
     elif choice == 'l':
         return string.partition(delimiter)[:part]
-
-
-def read_token():
-    with open("token.txt", 'r') as f:
-        lines = f.readlines()
-        return lines[0].strip()
 
 
 def get_inspirational_quote():
@@ -105,6 +136,19 @@ def get_random_sentence_from_file(filename, mode):
     quotes = list(filter(None, quotes))
     r = random.choice(quotes)
     return str(r)
+
+
+# \s matches whitespace (spaces, tabs and new lines). \S is negated \s.
+def process_comment(s):
+    s = html.unescape(s)
+    s = re.sub("(<a.*?</a>)", "", s)
+    s = re.sub('<span class="quote">>(.*?)</span>', '\g<1>', s)
+    s = re.sub('<br>',"\n", s)
+    s = re.sub('\'', '', s)
+    s = re.sub('<(.*?)>?(.*?)</(.*?)','\g<2>', s)
+    s = re.sub('https?\S+', "", s)
+    s = re.sub('[^\w\s]','', s)
+    return s
 
 
 def get_last_4chan_id():
@@ -138,9 +182,27 @@ def get_last_4chan_id():
     last_post_date = int(''.join(char for char in replies_info[-1][1] if char.isdigit()))
 
     if (max(last_thread_date, last_post_date)) == last_thread_date:
-        return threads_info[-1][0]
+        return boards[idx], threads_info[-1][0]
     else:
-        return replies_info[-1][0]
+        return boards[idx], replies_info[-1][0]
+
+
+def get_random_4chan_comment():
+    idx = random.choice(active_boards)
+    url = "https://a.4cdn.org/{0}/catalog.json".format(boards[idx])
+    response = requests.get(url)
+    data = json.loads(response.text)
+
+    comments = []
+    for page_data in data:
+        for thread in page_data["threads"]:
+            if "sticky" not in thread and "com" in thread:
+                comments.append(process_comment(thread["com"]))
+                if thread["replies"] > 0:
+                    for reply in thread["last_replies"]:
+                        if "com" in reply:
+                            comments.append(process_comment(reply["com"]))
+    return boards[idx], random.choice(comments)
 
 
 # Events
@@ -184,20 +246,34 @@ async def _8ball(ctx):
 
 @bot.command(aliases=["Roll"], description="Returns the id of the most recent 4chan post from the most active boards. Usage: <$roll>")
 async def roll(ctx):
-    await ctx.send(get_last_4chan_id())
+    ret = get_last_4chan_id()
+    emb = discord.Embed(description="/{0}/ - {1}".format(ret[0], ret[1]), color=discord.Colour.purple())
+    emb.set_image(url="https://i.pinimg.com/736x/ef/d4/73/efd47303417d4fb39c1fb731b0b45174--american-psycho-american-a.jpg")
+    await ctx.send(embed=emb)
+    check_em = repeating_digits(ret[1])
+    if check_em:
+        await ctx.send("CHECK THESE {0}".format(check_em.upper()))
+
+
+@bot.command(aliases=["cmt"], description="Returns a random post from the most active 4chan boards. Usage: <$comment>")
+async def comment(ctx):
+    ret = get_random_4chan_comment()
+    emb = discord.Embed(title="/{0}/".format(ret[0]),description=ret[1], color=discord.Colour.green())
+    emb.set_image(url="https://seeklogo.com/images/1/4chan-logo-620B8734A9-seeklogo.com.png")
+    await ctx.send(embed=emb)
 
 
 @bot.command(aliases=["Quote"], description="Returns a random quote from the zenquotes.io website. Usage: <$quote>")
 async def quote(ctx):
-    msg = discord.Embed(description=get_inspirational_quote(), color=discord.Colour.purple())
-    await ctx.send(embed=msg)
+    emb = discord.Embed(description=get_inspirational_quote(), color=discord.Colour.purple())
+    await ctx.send(embed=emb)
 
 
 @bot.command(aliases=["Psycho"], description="Returns a random quote from the movie American Psycho. Usage: <$psycho>")
 async def psycho(ctx):
-    msg = discord.Embed(description=get_random_sentence_from_file("american_psycho.txt", "r"),
-                        color=discord.Colour.purple())
-    await ctx.send(embed=msg)
+    emb = discord.Embed(description=get_random_sentence_from_file("american_psycho.txt", "r"), color=discord.Colour.purple())
+    emb.set_image(url="https://upload.wikimedia.org/wikipedia/it/8/85/American_Psycho_PB.jpg")
+    await ctx.send(embed=emb)
 
 
 @bot.command(aliases=["flip"], description="A simple coin flip. Usage: <$flip> <tails | heads>")
@@ -227,27 +303,27 @@ async def disconnect(ctx):
         except RuntimeError:
             exit(-1)
     else:
-        await ctx.send("This command can only be called be the bot's owner.")
+        await ctx.send("Did you think you could outsmart me?")
         return
 
 
-# noinspection PyUnreachableCode
+# noinspection PyUnreachableCode, PyUnusedLocal
 @bot.command()
 async def history(ctx):
     return
     if ctx.message.author.id == my_user_id:
         await ctx.send("Started fetching messages info...")
         t1 = time.time()
-        messages_limit = 10000000
+        # loads msgs to a buffer and them write them to disk
         buffer_limit = 2500
         i = 0
         msg_count = 0
         user_csv_data = "user_csv_data.csv"
-        user_csv_data_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "user_histories", user_csv_data)
-        with open(user_csv_data_path, "a", encoding="utf-8") as fc:
+        user_csv_data_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../user_histories", user_csv_data)
+        with open(user_csv_data_path, "w", encoding="utf-8") as fc:
             writer = csv.writer(fc, delimiter=',')
             csv_list = []
-            async for message in ctx.channel.history(limit=messages_limit):
+            async for message in ctx.channel.history(limit=10000000):
                 if message.author.bot is False:
                     msg_count += 1
                     csv_list.append([str(message.author.id), message.content])
@@ -259,7 +335,7 @@ async def history(ctx):
                 else:
                     pass
             t2 = time.time()
-            await ctx.send("Time taken: {0} seconds. Fetched {1} message/s.".format(round(t2 - t1), msg_count))
+            await ctx.send("Time taken: {0} second/s. Fetched {1} message/s.".format(round(t2 - t1), msg_count))
             print(t2 - t1)
             return
     else:
@@ -267,14 +343,13 @@ async def history(ctx):
         return
 
 
-# noinspection PyUnreachableCode
+# noinspection PyUnreachableCode, PyUnusedLocal
 @bot.command()
 async def test_time(ctx):
     return
     if ctx.message.author.id == my_user_id:
-        channel = bot.get_channel(private_channel_id)
         t1 = time.time()
-        async for _ in ctx.channel.history(limit=1000000):
+        async for _ in ctx.channel.history(limit=10000000):
             pass
         t2 = time.time()
         await ctx.send("Time taken: {0}".format(t2-t1))
@@ -294,8 +369,8 @@ async def insult(ctx):
         return
     if msg == "someone" or msg == "qualcuno":
         random_member = random.choice(ctx.channel.members)
-        # check if the random selected member is the author of the message or a bot
-        while random_member == ctx.message.author or random_member.bot is True:
+        # check if the random selected member is the author of the message or a bot, or myself
+        while random_member == ctx.message.author or random_member.bot is True or random_member.id == my_user_id:
             random_member = random.choice(ctx.channel.members)
         await ctx.send("<@{0}> {1}".format(random_member.id, random_insult))
         return
