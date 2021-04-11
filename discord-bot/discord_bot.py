@@ -78,7 +78,6 @@ _4chan_rolls = {
 }
 
 
-
 def trim_string(string, delimiter, part):
     # $command 'delimiter' message
     return string.partition(delimiter)[part]
@@ -162,9 +161,11 @@ def get_last_4chan_id():
     threads_info = []
     replies_info = []
 
-    # the data contains page data, and each data has some threads inside of it
-    # each thread has a unique id and a date
-    # each thread has a list of last_replies
+    """
+    The data contains page data, and each data has some threads inside of it
+    Each thread has a unique id and a date
+    Each thread has a list of last_replies
+    """
     for page_data in data:
         for thread in page_data["threads"]:
             if "sticky" not in thread:
@@ -176,8 +177,10 @@ def get_last_4chan_id():
     # sort the posts by date by considering only numbers
     [r.sort(key=lambda x: [char for char in x[1] if char.isdigit()]) for r in [threads_info, replies_info]]
 
-    # Get only the digits from the dates and compare them
-    # - then return the id associated to that date
+    """
+    Get the digits from the dates and compare them
+    - then return the id associated to that date
+    """
     last_thread_date = int(''.join(char for char in threads_info[-1][1] if char.isdigit()))
     last_post_date = int(''.join(char for char in replies_info[-1][1] if char.isdigit()))
 
@@ -219,8 +222,10 @@ async def on_ready():
         print("Name:", user.name + ",", "ID:", user.id)
 
 
-# Overriding the default provided on_message forbids any extra commands from running.
-# To fix this, add a bot.process_commands(message) line at the end of your on_message.
+"""
+Overriding the default provided on_message forbids any extra commands from running.
+To fix this, add a bot.process_commands(message) line at the end of your on_message.
+"""
 @bot.event
 async def on_message(message):
     # do not react to our messages
